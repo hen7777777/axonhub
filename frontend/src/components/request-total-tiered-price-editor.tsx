@@ -1,8 +1,9 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useFieldArray, useFormContext, useWatch, type Control, type FieldArrayPath, type FieldPath } from 'react-hook-form';
 import { Layers, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ModelPriceEditor, type PriceEditorFormValues } from '@/components/model-price-editor';
+import { isPositivePriceMultiplier, multiplyPriceItems } from '@/components/request-total-tiered-price';
 import { Button } from '@/components/ui/button';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -32,18 +33,114 @@ export const RequestTotalTieredPriceEditor = memo(function RequestTotalTieredPri
   currencyCode?: string;
 }) {
   const { t } = useTranslation();
-  const { clearErrors, getValues, setValue } = useFormContext<PriceEditorFormValues>();
+  const { getValues, setValue } = useFormContext<PriceEditorFormValues>();
+  const [priceMultiplier, setPriceMultiplier] = useState('2');
   const basePath = `prices.${priceIndex}.price.requestTotalTiered`;
   const pricing = useWatch({
     control,
     name: asFieldPath(basePath),
     compute: (value) => value,
   }) as unknown as PriceEditorFormValues['prices'][number]['price']['requestTotalTiered'];
+
+  const getInitialItems = useCallback((): PriceItem[] => {
+    const baseItems =
+      (getValues(asFieldPath(`prices.${priceIndex}.price.items`)) as unknown as PriceItem[] | undefined) || [];
+    return baseItems.length
+      ? structuredClone(baseItems)
+      : [{ itemCode: 'prompt_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '0' } }];
+  }, [getValues, priceIndex]);
+
+  const handleToggle = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        setValue(asFieldPath(basePath), null as never, { shouldDirty: true, shouldValidate: true });
+        return;
+      }
+
+      const initialItems = getInitialItems();
+      setValue(
+        asFieldPath(basePath),
+        {
+          tiers: [
+            { upTo: 100_000, items: structuredClone(initialItems) },
+            {
+              upTo: null,
+              items: multiplyPriceItems(
+                initialItems,
+                isPositivePriceMultiplier(priceMultiplier) ? priceMultiplier : '2'
+              ),
+            },
+          ],
+        } as never,
+        { shouldDirty: true, shouldValidate: true }
+      );
+      setValue(asFieldPath(`prices.${priceIndex}.price.schedule`), null as never, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    },
+    [basePath, getInitialItems, priceIndex, priceMultiplier, setValue]
+  );
+
+  const isEnabled = pricing != null;
+
+  return (
+    <div className='mt-3 space-y-3'>
+      <div className='flex items-center gap-2'>
+        <Switch checked={isEnabled} onCheckedChange={handleToggle} />
+        <Layers size={14} className={isEnabled ? 'text-primary' : 'text-muted-foreground'} />
+        <span className='text-muted-foreground text-sm'>{t('price.requestTotalTiered.title')}</span>
+      </div>
+
+      {isEnabled && (
+        <RequestTotalTierFields
+          control={control}
+          priceIndex={priceIndex}
+          currencyCode={currencyCode}
+          basePath={basePath}
+          priceMultiplier={priceMultiplier}
+          onPriceMultiplierChange={setPriceMultiplier}
+        />
+      )}
+    </div>
+  );
+});
+
+function RequestTotalTierFields({
+  control,
+  priceIndex,
+  currencyCode,
+  basePath,
+  priceMultiplier,
+  onPriceMultiplierChange,
+}: {
+  control: Control<PriceEditorFormValues>;
+  priceIndex: number;
+  currencyCode?: string;
+  basePath: string;
+  priceMultiplier: string;
+  onPriceMultiplierChange: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { clearErrors, getValues, setValue } = useFormContext<PriceEditorFormValues>();
+  const pricing = useWatch({
+    control,
+    name: asFieldPath(basePath),
+    compute: (value) => value,
+  }) as unknown as PriceEditorFormValues['prices'][number]['price']['requestTotalTiered'];
   const tiers = pricing?.tiers || [];
-  const { fields, insert, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control,
     name: asFieldArrayPath(`${basePath}.tiers`),
   });
+
+  const getInitialItems = useCallback((): PriceItem[] => {
+    const baseItems =
+      (getValues(asFieldPath(`prices.${priceIndex}.price.items`)) as unknown as PriceItem[] | undefined) || [];
+    return baseItems.length
+      ? structuredClone(baseItems)
+      : [{ itemCode: 'prompt_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '0' } }];
+  }, [getValues, priceIndex]);
 
   const setTierItems = useCallback(
     (tierIndex: number, items: PriceItem[]) => {
@@ -61,47 +158,32 @@ export const RequestTotalTieredPriceEditor = memo(function RequestTotalTieredPri
     [basePath, getValues]
   );
 
-  const handleToggle = useCallback(
-    (checked: boolean) => {
-      if (!checked) {
-        setValue(asFieldPath(basePath), null as never, { shouldDirty: true, shouldValidate: true });
-        return;
-      }
-
-      const baseItems =
-        (getValues(asFieldPath(`prices.${priceIndex}.price.items`)) as unknown as PriceItem[] | undefined) || [];
-      const initialItems: PriceItem[] = baseItems.length
-        ? structuredClone(baseItems)
-        : [{ itemCode: 'prompt_tokens', pricing: { mode: 'usage_per_unit', usagePerUnit: '0' } }];
-
-      setValue(
-        asFieldPath(basePath),
-        {
-          tiers: [
-            { upTo: 100_000, items: structuredClone(initialItems) },
-            { upTo: null, items: structuredClone(initialItems) },
-          ],
-        } as never,
-        { shouldDirty: true, shouldValidate: true }
-      );
-      setValue(asFieldPath(`prices.${priceIndex}.price.schedule`), null as never, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-    },
-    [basePath, getValues, priceIndex, setValue]
-  );
-
   const handleAddTier = useCallback(() => {
-    if (!tiers.length) return;
-    const insertionIndex = tiers.length - 1;
-    const previousUpTo = insertionIndex > 0 ? tiers[insertionIndex - 1]?.upTo : null;
+    if (!isPositivePriceMultiplier(priceMultiplier)) return;
+
+    const currentTiers =
+      (getValues(asFieldPath(`${basePath}.tiers`)) as unknown as RequestTier[] | undefined) || [];
+    if (!currentTiers.length) {
+      const initialItems = getInitialItems();
+      replace([
+        { upTo: 100_000, items: structuredClone(initialItems) },
+        { upTo: null, items: multiplyPriceItems(initialItems, priceMultiplier) },
+      ] as RequestTier[]);
+      return;
+    }
+
+    const lastTierIndex = currentTiers.length - 1;
+    const previousUpTo = lastTierIndex > 0 ? currentTiers[lastTierIndex - 1]?.upTo : null;
     const nextUpTo = typeof previousUpTo === 'number' ? previousUpTo * 2 : 100_000;
-    insert(insertionIndex, {
-      upTo: nextUpTo,
-      items: structuredClone(tiers[insertionIndex]?.items || tiers[insertionIndex - 1]?.items || []),
-    } as RequestTier);
-  }, [insert, tiers]);
+    const sourceItems =
+      currentTiers[lastTierIndex]?.items || currentTiers[lastTierIndex - 1]?.items || getInitialItems();
+
+    setValue(asFieldPath(`${basePath}.tiers.${lastTierIndex}.upTo`), nextUpTo as never, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    append({ upTo: null, items: multiplyPriceItems(sourceItems, priceMultiplier) } as RequestTier);
+  }, [append, basePath, getInitialItems, getValues, priceMultiplier, replace, setValue]);
 
   const handleRemoveTier = useCallback(
     (tierIndex: number) => {
@@ -173,20 +255,35 @@ export const RequestTotalTieredPriceEditor = memo(function RequestTotalTieredPri
     [getTierItems, setTierItems]
   );
 
-  const isEnabled = pricing != null;
-
   return (
-    <div className='mt-3 space-y-3'>
-      <div className='flex items-center gap-2'>
-        <Switch checked={isEnabled} onCheckedChange={handleToggle} />
-        <Layers size={14} className={isEnabled ? 'text-primary' : 'text-muted-foreground'} />
-        <span className='text-muted-foreground text-sm'>{t('price.requestTotalTiered.title')}</span>
-      </div>
-
-      {isEnabled && (
-        <div className='space-y-4 rounded-md border border-dashed p-4'>
-          <div className='flex justify-end'>
-            <Button type='button' variant='outline' size='icon-sm' onClick={handleAddTier} title={t('price.requestTotalTiered.addTier')}>
+    <div className='space-y-4 rounded-md border border-dashed p-4'>
+          <div className='flex flex-wrap items-end justify-end gap-2'>
+            <label className='w-28 space-y-1 text-xs'>
+              <span className='text-muted-foreground'>{t('price.apply.multiplier')}</span>
+              <div className='relative'>
+                <Input
+                  type='number'
+                  min='0'
+                  step='any'
+                  inputMode='decimal'
+                  value={priceMultiplier}
+                  onChange={(event) => onPriceMultiplierChange(event.target.value)}
+                  aria-invalid={!isPositivePriceMultiplier(priceMultiplier)}
+                  className='h-8 pr-7'
+                />
+                <span className='text-muted-foreground pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs'>
+                  x
+                </span>
+              </div>
+            </label>
+            <Button
+              type='button'
+              variant='outline'
+              size='icon-sm'
+              onClick={handleAddTier}
+              disabled={!isPositivePriceMultiplier(priceMultiplier)}
+              title={t('price.requestTotalTiered.addTier')}
+            >
               <Plus size={14} />
             </Button>
           </div>
@@ -250,8 +347,6 @@ export const RequestTotalTieredPriceEditor = memo(function RequestTotalTieredPri
               </section>
             );
           })}
-        </div>
-      )}
     </div>
   );
-});
+}

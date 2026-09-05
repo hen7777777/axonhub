@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ModelPriceEditor } from '@/components/model-price-editor';
 import { PriceScheduleEditor } from '@/components/price-schedule-editor';
 import { RequestTotalTieredPriceEditor } from '@/components/request-total-tiered-price-editor';
+import { hasRequestTotalTiers } from '@/components/request-total-tiered-price';
 import { type ProviderModel, type ProvidersData } from '@/features/models/data/providers.schema';
 import { useProvidersData } from '@/features/models/data/providers';
 import { useGeneralSettings } from '@/features/system/data/system';
@@ -990,9 +991,9 @@ export function ChannelsModelPriceDialog() {
                   })),
                 }
               : null,
-            requestTotalTiered: p.price.requestTotalTiered
+            requestTotalTiered: hasRequestTotalTiers(p.price.requestTotalTiered)
               ? {
-                  tiers: p.price.requestTotalTiered.tiers.map((tier) => ({
+                  tiers: p.price.requestTotalTiered!.tiers.map((tier) => ({
                     upTo: tier.upTo,
                     items: tier.items.map(mapFormPriceItemToInput),
                   })),
