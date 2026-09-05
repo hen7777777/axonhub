@@ -430,6 +430,18 @@ models:
   ModelPriceItemInput:
     model:
       - github.com/looplj/axonhub/internal/objects.ModelPriceItem
+  RequestTotalTieredPricing:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestTotalTieredPricing
+  RequestTotalTieredPricingInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestTotalTieredPricing
+  RequestTotalPriceTier:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestTotalPriceTier
+  RequestTotalPriceTierInput:
+    model:
+      - github.com/looplj/axonhub/internal/objects.RequestTotalPriceTier
   Pricing:
     model:
       - github.com/looplj/axonhub/internal/objects.Pricing

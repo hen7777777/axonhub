@@ -438,3 +438,74 @@ func TestModelPrice_Validate(t *testing.T) {
 		assert.Contains(t, err.Error(), "usagePerUnit is required")
 	})
 }
+
+func TestModelPrice_RequestTotalTiered(t *testing.T) {
+	unitPrice := decimal.NewFromInt(1)
+	upTo100K := int64(100_000)
+	upTo50K := int64(50_000)
+	items := []ModelPriceItem{
+		{
+			ItemCode: PriceItemCodeUsage,
+			Pricing: Pricing{
+				Mode:         PricingModeUsagePerUnit,
+				UsagePerUnit: &unitPrice,
+			},
+		},
+	}
+
+	t.Run("valid", func(t *testing.T) {
+		price := ModelPrice{
+			Items: items,
+			RequestTotalTiered: &RequestTotalTieredPricing{
+				Tiers: []RequestTotalPriceTier{
+					{UpTo: &upTo100K, Items: items},
+					{UpTo: nil, Items: items},
+				},
+			},
+		}
+
+		require.NoError(t, price.Validate())
+		require.True(t, price.Equals(price))
+	})
+
+	t.Run("thresholds must increase", func(t *testing.T) {
+		price := ModelPrice{
+			Items: items,
+			RequestTotalTiered: &RequestTotalTieredPricing{
+				Tiers: []RequestTotalPriceTier{
+					{UpTo: &upTo100K, Items: items},
+					{UpTo: &upTo50K, Items: items},
+					{UpTo: nil, Items: items},
+				},
+			},
+		}
+
+		err := price.Validate()
+		require.ErrorContains(t, err, "must be greater than the previous tier")
+	})
+
+	t.Run("cannot be combined with schedule", func(t *testing.T) {
+		price := ModelPrice{
+			Items: items,
+			Schedule: &PriceSchedule{
+				Timezone: "UTC",
+				Overrides: []PriceOverride{
+					{
+						Name:     "override",
+						Priority: 1,
+						When: OverrideWhen{
+							Weekdays: []int{1},
+						},
+						Items: items,
+					},
+				},
+			},
+			RequestTotalTiered: &RequestTotalTieredPricing{
+				Tiers: []RequestTotalPriceTier{{UpTo: nil, Items: items}},
+			},
+		}
+
+		err := price.Validate()
+		require.ErrorContains(t, err, "requestTotalTiered and schedule cannot be used together")
+	})
+}

@@ -22,12 +22,22 @@ enum PromptWriteCacheVariantCode {
 type ModelPrice {
   items: [ModelPriceItem!]!
   schedule: PriceSchedule
+  requestTotalTiered: RequestTotalTieredPricing
 }
 
 type ModelPriceItem {
   itemCode: PriceItemCode!
   pricing: Pricing!
   promptWriteCacheVariants: [PromptWriteCacheVariant!]
+}
+
+type RequestTotalTieredPricing {
+  tiers: [RequestTotalPriceTier!]!
+}
+
+type RequestTotalPriceTier {
+  upTo: Int
+  items: [ModelPriceItem!]!
 }
 
 # Time-based price schedule
@@ -84,12 +94,22 @@ type PromptWriteCacheVariant {
 input ModelPriceInput {
   items: [ModelPriceItemInput!]!
   schedule: PriceScheduleInput
+  requestTotalTiered: RequestTotalTieredPricingInput
 }
 
 input ModelPriceItemInput {
   itemCode: PriceItemCode!
   pricing: PricingInput!
   promptWriteCacheVariants: [PromptWriteCacheVariantInput!]
+}
+
+input RequestTotalTieredPricingInput {
+  tiers: [RequestTotalPriceTierInput!]!
+}
+
+input RequestTotalPriceTierInput {
+  upTo: Int
+  items: [ModelPriceItemInput!]!
 }
 
 # Input types for time-based price schedule

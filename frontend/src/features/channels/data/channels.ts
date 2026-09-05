@@ -653,6 +653,39 @@ const GET_CHANNEL_MODEL_PRICES_QUERY = `
               }
             }
           }
+          requestTotalTiered {
+            tiers {
+              upTo
+              items {
+                itemCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
+                  }
+                }
+                promptWriteCacheVariants {
+                  variantCode
+                  pricing {
+                    mode
+                    flatFee
+                    usagePerUnit
+                    usageTiered {
+                      tiers {
+                        upTo
+                        pricePerUnit
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
           schedule {
             timezone
             overrides {
@@ -721,6 +754,39 @@ const SAVE_CHANNEL_MODEL_PRICES_MUTATION = `
                 tiers {
                   upTo
                   pricePerUnit
+                }
+              }
+            }
+          }
+        }
+        requestTotalTiered {
+          tiers {
+            upTo
+            items {
+              itemCode
+              pricing {
+                mode
+                flatFee
+                usagePerUnit
+                usageTiered {
+                  tiers {
+                    upTo
+                    pricePerUnit
+                  }
+                }
+              }
+              promptWriteCacheVariants {
+                variantCode
+                pricing {
+                  mode
+                  flatFee
+                  usagePerUnit
+                  usageTiered {
+                    tiers {
+                      upTo
+                      pricePerUnit
+                    }
+                  }
                 }
               }
             }

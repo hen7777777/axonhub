@@ -182,6 +182,16 @@ func (p *ModelPrice) Validate() error {
 		}
 	}
 
+	if p.RequestTotalTiered != nil {
+		if p.Schedule != nil {
+			return fmt.Errorf("requestTotalTiered and schedule cannot be used together")
+		}
+
+		if err := p.RequestTotalTiered.Validate(); err != nil {
+			return fmt.Errorf("requestTotalTiered: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -305,6 +315,116 @@ type ModelPriceItem struct {
 	PromptWriteCacheVariants []PromptWriteCacheVariant `json:"promptWriteCacheVariants,omitempty"`
 }
 
+// RequestTotalTieredPricing selects one complete set of price items based on
+// the request's prompt plus completion token count.
+type RequestTotalTieredPricing struct {
+	Tiers []RequestTotalPriceTier `json:"tiers"`
+}
+
+func (p *RequestTotalTieredPricing) Equals(other *RequestTotalTieredPricing) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+
+	if len(p.Tiers) != len(other.Tiers) {
+		return false
+	}
+
+	for i := range p.Tiers {
+		if !p.Tiers[i].Equals(&other.Tiers[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (p *RequestTotalTieredPricing) Validate() error {
+	if p == nil {
+		return nil
+	}
+
+	if len(p.Tiers) == 0 {
+		return fmt.Errorf("tiers is required")
+	}
+
+	var previousUpTo int64
+	lastIdx := len(p.Tiers) - 1
+
+	for i := range p.Tiers {
+		tier := &p.Tiers[i]
+		if i == lastIdx {
+			if tier.UpTo != nil {
+				return fmt.Errorf("tiers[%d].upTo must be null", i)
+			}
+		} else {
+			if tier.UpTo == nil {
+				return fmt.Errorf("tiers[%d].upTo is required", i)
+			}
+
+			if *tier.UpTo <= previousUpTo {
+				return fmt.Errorf("tiers[%d].upTo must be greater than the previous tier", i)
+			}
+
+			previousUpTo = *tier.UpTo
+		}
+
+		if len(tier.Items) == 0 {
+			return fmt.Errorf("tiers[%d].items is required", i)
+		}
+
+		seenItemCodes := make(map[PriceItemCode]struct{}, len(tier.Items))
+		for itemIdx := range tier.Items {
+			item := &tier.Items[itemIdx]
+			if _, exists := seenItemCodes[item.ItemCode]; exists {
+				return fmt.Errorf("tiers[%d].items[%d].itemCode is duplicated", i, itemIdx)
+			}
+
+			seenItemCodes[item.ItemCode] = struct{}{}
+			if err := item.Validate(); err != nil {
+				return fmt.Errorf("tiers[%d].items[%d]: %w", i, itemIdx, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// RequestTotalPriceTier is one request-total range and its complete prices.
+type RequestTotalPriceTier struct {
+	// UpTo is inclusive. A nil value means no upper bound and is only valid on
+	// the final tier.
+	UpTo *int64 `json:"upTo,omitempty"`
+
+	Items []ModelPriceItem `json:"items"`
+}
+
+func (p *RequestTotalPriceTier) Equals(other *RequestTotalPriceTier) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+
+	if (p.UpTo == nil) != (other.UpTo == nil) {
+		return false
+	}
+
+	if p.UpTo != nil && *p.UpTo != *other.UpTo {
+		return false
+	}
+
+	if len(p.Items) != len(other.Items) {
+		return false
+	}
+
+	for i := range p.Items {
+		if !p.Items[i].Equals(&other.Items[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (i *ModelPriceItem) Equals(other *ModelPriceItem) bool {
 	if i == nil || other == nil {
 		return i == other
@@ -338,6 +458,10 @@ type ModelPrice struct {
 
 	// Schedule is the optional time-based price override configuration.
 	Schedule *PriceSchedule `json:"schedule,omitempty"`
+
+	// RequestTotalTiered selects a complete item set using prompt plus
+	// completion tokens for the current request.
+	RequestTotalTiered *RequestTotalTieredPricing `json:"requestTotalTiered,omitempty"`
 }
 
 func (p *ModelPrice) Equals(other ModelPrice) bool {
@@ -356,6 +480,10 @@ func (p *ModelPrice) Equals(other ModelPrice) bool {
 	}
 
 	if p.Schedule != nil && !p.Schedule.Equals(other.Schedule) {
+		return false
+	}
+
+	if !p.RequestTotalTiered.Equals(other.RequestTotalTiered) {
 		return false
 	}
 

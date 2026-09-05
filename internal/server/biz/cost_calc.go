@@ -144,13 +144,36 @@ func getUpToOrZero(v *int64) int64 {
 func ComputeUsageCost(usage *llm.Usage, price objects.ModelPrice, now time.Time) ([]objects.CostItem, decimal.Decimal) {
 	effectiveItems := price.Items
 
-	if price.Schedule != nil {
+	if price.RequestTotalTiered != nil {
+		requestTotal := max(usage.PromptTokens, 0) + max(usage.CompletionTokens, 0)
+		if tier := findMatchingRequestTotalTier(requestTotal, price.RequestTotalTiered); tier != nil {
+			effectiveItems = tier.Items
+		}
+	} else if price.Schedule != nil {
 		if override := findMatchingOverride(now, price.Schedule); override != nil {
 			effectiveItems = override.Items
 		}
 	}
 
 	return computeUsageCostWithItems(usage, effectiveItems)
+}
+
+func findMatchingRequestTotalTier(
+	requestTotal int64,
+	pricing *objects.RequestTotalTieredPricing,
+) *objects.RequestTotalPriceTier {
+	if pricing == nil {
+		return nil
+	}
+
+	for i := range pricing.Tiers {
+		tier := &pricing.Tiers[i]
+		if tier.UpTo == nil || requestTotal <= *tier.UpTo {
+			return tier
+		}
+	}
+
+	return nil
 }
 
 func computeUsageCostWithItems(usage *llm.Usage, priceItems []objects.ModelPriceItem) ([]objects.CostItem, decimal.Decimal) {

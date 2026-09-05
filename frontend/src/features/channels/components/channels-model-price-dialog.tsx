@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModelPriceEditor } from '@/components/model-price-editor';
 import { PriceScheduleEditor } from '@/components/price-schedule-editor';
+import { RequestTotalTieredPriceEditor } from '@/components/request-total-tiered-price-editor';
 import { type ProviderModel, type ProvidersData } from '@/features/models/data/providers.schema';
 import { useProvidersData } from '@/features/models/data/providers';
 import { useGeneralSettings } from '@/features/system/data/system';
@@ -33,6 +34,37 @@ const priceItemCodes = ['prompt_tokens', 'completion_tokens', 'prompt_cached_tok
 const pricingModes = ['flat_fee', 'usage_per_unit', 'usage_tiered', 'usage_volume'] as const;
 const promptWriteCacheVariantCodes = ['five_min', 'one_hour'] as const;
 
+const usageTierFormSchema = z.object({
+  upTo: z.number().nullable().optional(),
+  pricePerUnit: z.string(),
+});
+
+const pricingFormSchema = z.object({
+  mode: z.enum(pricingModes),
+  flatFee: z.string().optional().nullable(),
+  usagePerUnit: z.string().optional().nullable(),
+  usageTiered: z
+    .object({
+      tiers: z.array(usageTierFormSchema),
+    })
+    .optional()
+    .nullable(),
+});
+
+const priceItemFormSchema = z.object({
+  itemCode: z.enum(priceItemCodes),
+  pricing: pricingFormSchema,
+  promptWriteCacheVariants: z
+    .array(
+      z.object({
+        variantCode: z.enum(promptWriteCacheVariantCodes),
+        pricing: pricingFormSchema,
+      })
+    )
+    .optional()
+    .nullable(),
+});
+
 const createPriceFormSchema = (t: (key: string) => string) =>
   z
     .object({
@@ -40,51 +72,7 @@ const createPriceFormSchema = (t: (key: string) => string) =>
         z.object({
           modelId: z.string().min(1, { message: t('price.validation.modelRequired') }),
           price: z.object({
-            items: z.array(
-              z.object({
-                itemCode: z.enum(priceItemCodes),
-                pricing: z.object({
-                  mode: z.enum(pricingModes),
-                  flatFee: z.string().optional().nullable(),
-                  usagePerUnit: z.string().optional().nullable(),
-                  usageTiered: z
-                    .object({
-                      tiers: z.array(
-                        z.object({
-                          upTo: z.number().nullable().optional(),
-                          pricePerUnit: z.string(),
-                        })
-                      ),
-                    })
-                    .optional()
-                    .nullable(),
-                }),
-                promptWriteCacheVariants: z
-                  .array(
-                    z.object({
-                      variantCode: z.enum(promptWriteCacheVariantCodes),
-                      pricing: z.object({
-                        mode: z.enum(pricingModes),
-                        flatFee: z.string().optional().nullable(),
-                        usagePerUnit: z.string().optional().nullable(),
-                        usageTiered: z
-                          .object({
-                            tiers: z.array(
-                              z.object({
-                                upTo: z.number().nullable().optional(),
-                                pricePerUnit: z.string(),
-                              })
-                            ),
-                          })
-                          .optional()
-                          .nullable(),
-                      }),
-                    })
-                  )
-                  .optional()
-                  .nullable(),
-              })
-            ),
+            items: z.array(priceItemFormSchema),
             schedule: z
               .object({
                 timezone: z.string(),
@@ -109,27 +97,18 @@ const createPriceFormSchema = (t: (key: string) => string) =>
                         .optional()
                         .nullable(),
                     }),
-                    items: z.array(
-                      z.object({
-                        itemCode: z.enum(priceItemCodes),
-                        pricing: z.object({
-                          mode: z.enum(pricingModes),
-                          flatFee: z.string().optional().nullable(),
-                          usagePerUnit: z.string().optional().nullable(),
-                          usageTiered: z
-                            .object({
-                              tiers: z.array(
-                                z.object({
-                                  upTo: z.number().nullable().optional(),
-                                  pricePerUnit: z.string(),
-                                })
-                              ),
-                            })
-                            .optional()
-                            .nullable(),
-                        }),
-                      })
-                    ),
+                    items: z.array(priceItemFormSchema),
+                  })
+                ),
+              })
+              .optional()
+              .nullable(),
+            requestTotalTiered: z
+              .object({
+                tiers: z.array(
+                  z.object({
+                    upTo: z.number().nullable().optional(),
+                    items: z.array(priceItemFormSchema),
                   })
                 ),
               })
@@ -212,69 +191,53 @@ const createPriceFormSchema = (t: (key: string) => string) =>
         }
       };
 
-      data.prices.forEach((price, priceIndex) => {
-        // Check for duplicate item codes
+      const validateItems = (items: z.infer<typeof priceItemFormSchema>[], pathPrefix: Array<string | number>) => {
         const itemCodes = new Map<string, number[]>();
-        price.price.items.forEach((item, itemIndex) => {
-          const code = item.itemCode;
-          if (!itemCodes.has(code)) {
-            itemCodes.set(code, []);
-          }
-          itemCodes.get(code)!.push(itemIndex);
+        items.forEach((item, itemIndex) => {
+          const indexes = itemCodes.get(item.itemCode) || [];
+          indexes.push(itemIndex);
+          itemCodes.set(item.itemCode, indexes);
         });
 
-        itemCodes.forEach((indexes, _code) => {
-          if (indexes.length > 1) {
-            indexes.forEach((index) => {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: t('price.duplicateItemCode'),
-                path: ['prices', priceIndex, 'price', 'items', index, 'itemCode'],
-              });
+        itemCodes.forEach((indexes) => {
+          if (indexes.length <= 1) return;
+          indexes.forEach((itemIndex) => {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: t('price.duplicateItemCode'),
+              path: [...pathPrefix, itemIndex, 'itemCode'],
             });
-          }
+          });
         });
 
-        // Check for duplicate variant codes and validate pricing fields
-        price.price.items.forEach((item, itemIndex) => {
+        items.forEach((item, itemIndex) => {
           const variantCodes = new Map<string, number[]>();
           (item.promptWriteCacheVariants || []).forEach((variant, variantIndex) => {
-            const code = variant.variantCode;
-            if (!variantCodes.has(code)) {
-              variantCodes.set(code, []);
-            }
-            variantCodes.get(code)!.push(variantIndex);
+            const indexes = variantCodes.get(variant.variantCode) || [];
+            indexes.push(variantIndex);
+            variantCodes.set(variant.variantCode, indexes);
           });
 
-          variantCodes.forEach((indexes, _code) => {
-            if (indexes.length > 1) {
-              indexes.forEach((index) => {
-                ctx.addIssue({
-                  code: z.ZodIssueCode.custom,
-                  message: t('price.duplicateVariantCode'),
-                  path: ['prices', priceIndex, 'price', 'items', itemIndex, 'promptWriteCacheVariants', index, 'variantCode'],
-                });
+          variantCodes.forEach((indexes) => {
+            if (indexes.length <= 1) return;
+            indexes.forEach((variantIndex) => {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t('price.duplicateVariantCode'),
+                path: [...pathPrefix, itemIndex, 'promptWriteCacheVariants', variantIndex, 'variantCode'],
               });
-            }
+            });
           });
 
-          // Validate item pricing based on mode
-          validatePricing(item.pricing, ['prices', priceIndex, 'price', 'items', itemIndex, 'pricing']);
-
-          // Validate variant pricing based on mode
+          validatePricing(item.pricing, [...pathPrefix, itemIndex, 'pricing']);
           (item.promptWriteCacheVariants || []).forEach((variant, variantIndex) => {
-            validatePricing(variant.pricing, [
-              'prices',
-              priceIndex,
-              'price',
-              'items',
-              itemIndex,
-              'promptWriteCacheVariants',
-              variantIndex,
-              'pricing',
-            ]);
+            validatePricing(variant.pricing, [...pathPrefix, itemIndex, 'promptWriteCacheVariants', variantIndex, 'pricing']);
           });
         });
+      };
+
+      data.prices.forEach((price, priceIndex) => {
+        validateItems(price.price.items, ['prices', priceIndex, 'price', 'items']);
 
         // Validate schedule
         const schedule = price.price.schedule;
@@ -301,6 +264,59 @@ const createPriceFormSchema = (t: (key: string) => string) =>
             }
           });
         }
+
+        const requestTotalTiered = price.price.requestTotalTiered;
+        if (requestTotalTiered) {
+          if (schedule) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: t('price.requestTotalTiered.validation.scheduleConflict'),
+              path: ['prices', priceIndex, 'price', 'requestTotalTiered'],
+            });
+          }
+
+          if (requestTotalTiered.tiers.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: t('price.requestTotalTiered.validation.tiersRequired'),
+              path: ['prices', priceIndex, 'price', 'requestTotalTiered', 'tiers'],
+            });
+          }
+
+          let previousUpTo = 0;
+          const lastTierIndex = requestTotalTiered.tiers.length - 1;
+          requestTotalTiered.tiers.forEach((tier, tierIndex) => {
+            const tierPath = ['prices', priceIndex, 'price', 'requestTotalTiered', 'tiers', tierIndex];
+            const isLastTier = tierIndex === lastTierIndex;
+            if (isLastTier ? tier.upTo != null : tier.upTo == null) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: isLastTier
+                  ? t('price.requestTotalTiered.validation.lastTierUnlimited')
+                  : t('price.requestTotalTiered.validation.upToRequired'),
+                path: [...tierPath, 'upTo'],
+              });
+            }
+            if (!isLastTier && tier.upTo != null) {
+              if (!Number.isSafeInteger(tier.upTo) || tier.upTo <= previousUpTo) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  message: t('price.requestTotalTiered.validation.upToIncreasing'),
+                  path: [...tierPath, 'upTo'],
+                });
+              }
+              previousUpTo = tier.upTo;
+            }
+            if (tier.items.length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t('price.requestTotalTiered.validation.itemsRequired'),
+                path: [...tierPath, 'items'],
+              });
+            }
+            validateItems(tier.items, [...tierPath, 'items']);
+          });
+        }
       });
     });
 type PriceFormData = z.infer<ReturnType<typeof createPriceFormSchema>>;
@@ -310,6 +326,44 @@ function trimPriceValue(value: string | number | null | undefined): string | num
   if (typeof value === 'number') return value;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+function mapFormPriceItemToInput(
+  item: PriceFormData['prices'][number]['price']['items'][number]
+): SaveChannelModelPriceInput['price']['items'][number] {
+  return {
+    itemCode: item.itemCode as PriceItemCode,
+    pricing: {
+      mode: item.pricing.mode as PricingMode,
+      flatFee: trimPriceValue(item.pricing.flatFee),
+      usagePerUnit: trimPriceValue(item.pricing.usagePerUnit),
+      usageTiered: item.pricing.usageTiered
+        ? {
+            tiers: item.pricing.usageTiered.tiers.map((tier) => ({
+              upTo: tier.upTo,
+              pricePerUnit: tier.pricePerUnit.trim(),
+            })),
+          }
+        : null,
+    },
+    promptWriteCacheVariants:
+      item.promptWriteCacheVariants?.map((variant) => ({
+        variantCode: variant.variantCode,
+        pricing: {
+          mode: variant.pricing.mode as PricingMode,
+          flatFee: trimPriceValue(variant.pricing.flatFee),
+          usagePerUnit: trimPriceValue(variant.pricing.usagePerUnit),
+          usageTiered: variant.pricing.usageTiered
+            ? {
+                tiers: variant.pricing.usageTiered.tiers.map((tier) => ({
+                  upTo: tier.upTo,
+                  pricePerUnit: tier.pricePerUnit.trim(),
+                })),
+              }
+            : null,
+        },
+      })) || [],
+  };
 }
 
 type ChannelModelPrices = NonNullable<ReturnType<typeof useChannelModelPrices>['data']>;
@@ -327,41 +381,47 @@ function buildAvailableModelsByIndex(prices: Array<PriceFormData['prices'][numbe
   });
 }
 
+function mapPriceItemToForm(
+  item: ModelPrice['items'][number]
+): PriceFormData['prices'][number]['price']['items'][number] {
+  return {
+    itemCode: item.itemCode,
+    pricing: {
+      mode: item.pricing.mode,
+      flatFee: item.pricing.flatFee?.toString() || '',
+      usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
+      usageTiered: item.pricing.usageTiered
+        ? {
+            tiers: item.pricing.usageTiered.tiers.map((t) => ({
+              upTo: t.upTo,
+              pricePerUnit: t.pricePerUnit.toString(),
+            })),
+          }
+        : null,
+    },
+    promptWriteCacheVariants:
+      item.promptWriteCacheVariants?.map((v) => ({
+        variantCode: v.variantCode,
+        pricing: {
+          mode: v.pricing.mode,
+          flatFee: v.pricing.flatFee?.toString() || '',
+          usagePerUnit: v.pricing.usagePerUnit?.toString() || '',
+          usageTiered: v.pricing.usageTiered
+            ? {
+                tiers: v.pricing.usageTiered.tiers.map((t) => ({
+                  upTo: t.upTo,
+                  pricePerUnit: t.pricePerUnit.toString(),
+                })),
+              }
+            : null,
+        },
+      })) || [],
+  };
+}
+
 function mapPriceToForm(price: ModelPrice): PriceFormData['prices'][number]['price'] {
   return {
-    items: price.items.map((item) => ({
-      itemCode: item.itemCode,
-      pricing: {
-        mode: item.pricing.mode,
-        flatFee: item.pricing.flatFee?.toString() || '',
-        usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
-        usageTiered: item.pricing.usageTiered
-          ? {
-              tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                upTo: t.upTo,
-                pricePerUnit: t.pricePerUnit.toString(),
-              })),
-            }
-          : null,
-      },
-      promptWriteCacheVariants:
-        item.promptWriteCacheVariants?.map((v) => ({
-          variantCode: v.variantCode,
-          pricing: {
-            mode: v.pricing.mode,
-            flatFee: v.pricing.flatFee?.toString() || '',
-            usagePerUnit: v.pricing.usagePerUnit?.toString() || '',
-            usageTiered: v.pricing.usageTiered
-              ? {
-                  tiers: v.pricing.usageTiered.tiers.map((t) => ({
-                    upTo: t.upTo,
-                    pricePerUnit: t.pricePerUnit.toString(),
-                  })),
-                }
-              : null,
-          },
-        })) || [],
-    })),
+    items: price.items.map(mapPriceItemToForm),
     schedule: price.schedule
       ? {
           timezone: price.schedule.timezone,
@@ -373,22 +433,15 @@ function mapPriceToForm(price: ModelPrice): PriceFormData['prices'][number]['pri
               weekdays: o.when.weekdays || null,
               dateRange: o.when.dateRange || null,
             },
-            items: o.items.map((item) => ({
-              itemCode: item.itemCode,
-              pricing: {
-                mode: item.pricing.mode,
-                flatFee: item.pricing.flatFee?.toString() || '',
-                usagePerUnit: item.pricing.usagePerUnit?.toString() || '',
-                usageTiered: item.pricing.usageTiered
-                  ? {
-                      tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                        upTo: t.upTo,
-                        pricePerUnit: t.pricePerUnit.toString(),
-                      })),
-                    }
-                  : null,
-              },
-            })),
+            items: o.items.map(mapPriceItemToForm),
+          })),
+        }
+      : null,
+    requestTotalTiered: price.requestTotalTiered
+      ? {
+          tiers: price.requestTotalTiered.tiers.map((tier) => ({
+            upTo: tier.upTo,
+            items: tier.items.map(mapPriceItemToForm),
           })),
         }
       : null,
@@ -537,6 +590,12 @@ const PriceCard = memo(function PriceCard({
   onAddVariant: (priceIndex: number, itemIndex: number) => void;
   onRemoveVariant: (priceIndex: number, itemIndex: number, variantIndex: number) => void;
 }) {
+  const requestTotalTiered = useWatch({
+    control,
+    name: `prices.${priceIndex}.price.requestTotalTiered`,
+    compute: (value) => value,
+  });
+
   return (
     <Card className='overflow-hidden'>
       <CardContent className='pt-6'>
@@ -618,21 +677,30 @@ const PriceCard = memo(function PriceCard({
             <div className='flex h-8 items-center md:hidden'>
               <FormLabel className='truncate'>{t('price.items')}</FormLabel>
             </div>
-            <ModelPriceEditor
+            {!requestTotalTiered && (
+              <ModelPriceEditor
+                control={control}
+                priceIndex={priceIndex}
+                currencyCode={currencyCode}
+                hideHeader
+                onAddItem={onAddItem}
+                onRemoveItem={onRemoveItem}
+                onAddVariant={onAddVariant}
+                onRemoveVariant={onRemoveVariant}
+              />
+            )}
+            {!requestTotalTiered && (
+              <PriceScheduleEditor
+                control={control}
+                priceIndex={priceIndex}
+                currencyCode={currencyCode}
+                defaultTimezone={defaultTimezone}
+              />
+            )}
+            <RequestTotalTieredPriceEditor
               control={control}
               priceIndex={priceIndex}
               currencyCode={currencyCode}
-              hideHeader
-              onAddItem={onAddItem}
-              onRemoveItem={onRemoveItem}
-              onAddVariant={onAddVariant}
-              onRemoveVariant={onRemoveVariant}
-            />
-            <PriceScheduleEditor
-              control={control}
-              priceIndex={priceIndex}
-              currencyCode={currencyCode}
-              defaultTimezone={defaultTimezone}
             />
           </div>
 
@@ -903,39 +971,7 @@ export function ChannelsModelPriceDialog() {
         const input = data.prices.map((p) => ({
           modelId: p.modelId,
           price: {
-            items: p.price.items.map((item) => ({
-              itemCode: item.itemCode as PriceItemCode,
-              pricing: {
-                mode: item.pricing.mode as PricingMode,
-                flatFee: trimPriceValue(item.pricing.flatFee),
-                usagePerUnit: trimPriceValue(item.pricing.usagePerUnit),
-                usageTiered: item.pricing.usageTiered
-                  ? {
-                      tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                        upTo: t.upTo,
-                        pricePerUnit: t.pricePerUnit.trim(),
-                      })),
-                    }
-                  : null,
-              },
-              promptWriteCacheVariants:
-                item.promptWriteCacheVariants?.map((v) => ({
-                  variantCode: v.variantCode,
-                  pricing: {
-                    mode: v.pricing.mode as PricingMode,
-                    flatFee: trimPriceValue(v.pricing.flatFee),
-                    usagePerUnit: trimPriceValue(v.pricing.usagePerUnit),
-                    usageTiered: v.pricing.usageTiered
-                      ? {
-                          tiers: v.pricing.usageTiered.tiers.map((t) => ({
-                            upTo: t.upTo,
-                            pricePerUnit: t.pricePerUnit.trim(),
-                          })),
-                        }
-                      : null,
-                  },
-                })) || [],
-            })),
+            items: p.price.items.map(mapFormPriceItemToInput),
             schedule: p.price.schedule
               ? {
                   timezone: p.price.schedule.timezone,
@@ -950,22 +986,15 @@ export function ChannelsModelPriceDialog() {
                           ? { start: o.when.dateRange.start, end: o.when.dateRange.end }
                           : null,
                     },
-                    items: o.items.map((item) => ({
-                      itemCode: item.itemCode as PriceItemCode,
-                      pricing: {
-                        mode: item.pricing.mode as PricingMode,
-                        flatFee: item.pricing.flatFee || null,
-                        usagePerUnit: item.pricing.usagePerUnit || null,
-                        usageTiered: item.pricing.usageTiered
-                          ? {
-                              tiers: item.pricing.usageTiered.tiers.map((t) => ({
-                                upTo: t.upTo,
-                                pricePerUnit: t.pricePerUnit.trim(),
-                              })),
-                            }
-                          : null,
-                      },
-                    })),
+                    items: o.items.map(mapFormPriceItemToInput),
+                  })),
+                }
+              : null,
+            requestTotalTiered: p.price.requestTotalTiered
+              ? {
+                  tiers: p.price.requestTotalTiered.tiers.map((tier) => ({
+                    upTo: tier.upTo,
+                    items: tier.items.map(mapFormPriceItemToInput),
                   })),
                 }
               : null,
@@ -1007,6 +1036,15 @@ export function ChannelsModelPriceDialog() {
       const currentItems = getValues(`prices.${priceIndex}.price.items`) || [];
       const merged = mergeItemsWithProviderCost(currentItems, providerModel, multiplier);
       setValue(`prices.${priceIndex}.price.items`, merged, { shouldDirty: true, shouldValidate: true });
+
+      const requestTotalTiered = getValues(`prices.${priceIndex}.price.requestTotalTiered`);
+      requestTotalTiered?.tiers.forEach((tier, tierIndex) => {
+        setValue(
+          `prices.${priceIndex}.price.requestTotalTiered.tiers.${tierIndex}.items`,
+          mergeItemsWithProviderCost(tier.items, providerModel, multiplier),
+          { shouldDirty: true, shouldValidate: true }
+        );
+      });
     },
     [getValues, setValue, multiplier]
   );

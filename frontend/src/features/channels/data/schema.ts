@@ -528,9 +528,21 @@ export const priceScheduleSchema = z.object({
 });
 export type PriceSchedule = z.infer<typeof priceScheduleSchema>;
 
+export const requestTotalPriceTierSchema = z.object({
+  upTo: z.number().nullable().optional(),
+  items: z.array(modelPriceItemSchema),
+});
+export type RequestTotalPriceTier = z.infer<typeof requestTotalPriceTierSchema>;
+
+export const requestTotalTieredPricingSchema = z.object({
+  tiers: z.array(requestTotalPriceTierSchema),
+});
+export type RequestTotalTieredPricing = z.infer<typeof requestTotalTieredPricingSchema>;
+
 export const modelPriceSchema = z.object({
   items: z.array(modelPriceItemSchema),
   schedule: priceScheduleSchema.optional().nullable(),
+  requestTotalTiered: requestTotalTieredPricingSchema.optional().nullable(),
 });
 export type ModelPrice = z.infer<typeof modelPriceSchema>;
 

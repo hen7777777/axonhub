@@ -925,8 +925,9 @@ type ComplexityRoot struct {
 	}
 
 	ModelPrice struct {
-		Items    func(childComplexity int) int
-		Schedule func(childComplexity int) int
+		Items              func(childComplexity int) int
+		RequestTotalTiered func(childComplexity int) int
+		Schedule           func(childComplexity int) int
 	}
 
 	ModelPriceItem struct {
@@ -1582,6 +1583,15 @@ type ComplexityRoot struct {
 	RequestStatsByModel struct {
 		Count   func(childComplexity int) int
 		ModelID func(childComplexity int) int
+	}
+
+	RequestTotalPriceTier struct {
+		Items func(childComplexity int) int
+		UpTo  func(childComplexity int) int
+	}
+
+	RequestTotalTieredPricing struct {
+		Tiers func(childComplexity int) int
 	}
 
 	RestorePayload struct {
@@ -5620,6 +5630,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ModelPrice.Items(childComplexity), true
+	case "ModelPrice.requestTotalTiered":
+		if e.complexity.ModelPrice.RequestTotalTiered == nil {
+			break
+		}
+
+		return e.complexity.ModelPrice.RequestTotalTiered(childComplexity), true
 	case "ModelPrice.schedule":
 		if e.complexity.ModelPrice.Schedule == nil {
 			break
@@ -9459,6 +9475,26 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.RequestStatsByModel.ModelID(childComplexity), true
 
+	case "RequestTotalPriceTier.items":
+		if e.complexity.RequestTotalPriceTier.Items == nil {
+			break
+		}
+
+		return e.complexity.RequestTotalPriceTier.Items(childComplexity), true
+	case "RequestTotalPriceTier.upTo":
+		if e.complexity.RequestTotalPriceTier.UpTo == nil {
+			break
+		}
+
+		return e.complexity.RequestTotalPriceTier.UpTo(childComplexity), true
+
+	case "RequestTotalTieredPricing.tiers":
+		if e.complexity.RequestTotalTieredPricing.Tiers == nil {
+			break
+		}
+
+		return e.complexity.RequestTotalTieredPricing.Tiers(childComplexity), true
+
 	case "RestorePayload.message":
 		if e.complexity.RestorePayload.Message == nil {
 			break
@@ -11773,6 +11809,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputRequestExecutionOrder,
 		ec.unmarshalInputRequestExecutionWhereInput,
 		ec.unmarshalInputRequestOrder,
+		ec.unmarshalInputRequestTotalPriceTierInput,
+		ec.unmarshalInputRequestTotalTieredPricingInput,
 		ec.unmarshalInputRequestWhereInput,
 		ec.unmarshalInputRestoreOptionsInput,
 		ec.unmarshalInputRetryableErrorPatternInput,
@@ -22225,6 +22263,8 @@ func (ec *executionContext) fieldContext_ChannelModelPrice_price(_ context.Conte
 				return ec.fieldContext_ModelPrice_items(ctx, field)
 			case "schedule":
 				return ec.fieldContext_ModelPrice_schedule(ctx, field)
+			case "requestTotalTiered":
+				return ec.fieldContext_ModelPrice_requestTotalTiered(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelPrice", field.Name)
 		},
@@ -22792,6 +22832,8 @@ func (ec *executionContext) fieldContext_ChannelModelPriceVersion_price(_ contex
 				return ec.fieldContext_ModelPrice_items(ctx, field)
 			case "schedule":
 				return ec.fieldContext_ModelPrice_schedule(ctx, field)
+			case "requestTotalTiered":
+				return ec.fieldContext_ModelPrice_requestTotalTiered(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ModelPrice", field.Name)
 		},
@@ -31422,6 +31464,39 @@ func (ec *executionContext) fieldContext_ModelPrice_schedule(_ context.Context, 
 				return ec.fieldContext_PriceSchedule_overrides(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PriceSchedule", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ModelPrice_requestTotalTiered(ctx context.Context, field graphql.CollectedField, obj *objects.ModelPrice) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ModelPrice_requestTotalTiered,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestTotalTiered, nil
+		},
+		nil,
+		ec.marshalORequestTotalTieredPricing2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalTieredPricing,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ModelPrice_requestTotalTiered(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ModelPrice",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "tiers":
+				return ec.fieldContext_RequestTotalTieredPricing_tiers(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RequestTotalTieredPricing", field.Name)
 		},
 	}
 	return fc, nil
@@ -50960,6 +51035,107 @@ func (ec *executionContext) fieldContext_RequestStatsByModel_count(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RequestTotalPriceTier_upTo(ctx context.Context, field graphql.CollectedField, obj *objects.RequestTotalPriceTier) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestTotalPriceTier_upTo,
+		func(ctx context.Context) (any, error) {
+			return obj.UpTo, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestTotalPriceTier_upTo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestTotalPriceTier",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RequestTotalPriceTier_items(ctx context.Context, field graphql.CollectedField, obj *objects.RequestTotalPriceTier) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestTotalPriceTier_items,
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		ec.marshalNModelPriceItem2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐModelPriceItemᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestTotalPriceTier_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestTotalPriceTier",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "itemCode":
+				return ec.fieldContext_ModelPriceItem_itemCode(ctx, field)
+			case "pricing":
+				return ec.fieldContext_ModelPriceItem_pricing(ctx, field)
+			case "promptWriteCacheVariants":
+				return ec.fieldContext_ModelPriceItem_promptWriteCacheVariants(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ModelPriceItem", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RequestTotalTieredPricing_tiers(ctx context.Context, field graphql.CollectedField, obj *objects.RequestTotalTieredPricing) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RequestTotalTieredPricing_tiers,
+		func(ctx context.Context) (any, error) {
+			return obj.Tiers, nil
+		},
+		nil,
+		ec.marshalNRequestTotalPriceTier2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTierᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RequestTotalTieredPricing_tiers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RequestTotalTieredPricing",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "upTo":
+				return ec.fieldContext_RequestTotalPriceTier_upTo(ctx, field)
+			case "items":
+				return ec.fieldContext_RequestTotalPriceTier_items(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RequestTotalPriceTier", field.Name)
 		},
 	}
 	return fc, nil
@@ -73114,7 +73290,7 @@ func (ec *executionContext) unmarshalInputModelPriceInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"items", "schedule"}
+	fieldsInOrder := [...]string{"items", "schedule", "requestTotalTiered"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -73135,6 +73311,13 @@ func (ec *executionContext) unmarshalInputModelPriceInput(ctx context.Context, o
 				return it, err
 			}
 			it.Schedule = data
+		case "requestTotalTiered":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestTotalTiered"))
+			data, err := ec.unmarshalORequestTotalTieredPricingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalTieredPricing(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestTotalTiered = data
 		}
 	}
 
@@ -80065,6 +80248,67 @@ func (ec *executionContext) unmarshalInputRequestOrder(ctx context.Context, obj 
 				return it, err
 			}
 			it.Field = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputRequestTotalPriceTierInput(ctx context.Context, obj any) (objects.RequestTotalPriceTier, error) {
+	var it objects.RequestTotalPriceTier
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"upTo", "items"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "upTo":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("upTo"))
+			data, err := ec.unmarshalOInt2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpTo = data
+		case "items":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("items"))
+			data, err := ec.unmarshalNModelPriceItemInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐModelPriceItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Items = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputRequestTotalTieredPricingInput(ctx context.Context, obj any) (objects.RequestTotalTieredPricing, error) {
+	var it objects.RequestTotalTieredPricing
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"tiers"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "tiers":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tiers"))
+			data, err := ec.unmarshalNRequestTotalPriceTierInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTierᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tiers = data
 		}
 	}
 
@@ -97755,6 +97999,8 @@ func (ec *executionContext) _ModelPrice(ctx context.Context, sel ast.SelectionSe
 			}
 		case "schedule":
 			out.Values[i] = ec._ModelPrice_schedule(ctx, field, obj)
+		case "requestTotalTiered":
+			out.Values[i] = ec._ModelPrice_requestTotalTiered(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -105009,6 +105255,86 @@ func (ec *executionContext) _RequestStatsByModel(ctx context.Context, sel ast.Se
 			}
 		case "count":
 			out.Values[i] = ec._RequestStatsByModel_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var requestTotalPriceTierImplementors = []string{"RequestTotalPriceTier"}
+
+func (ec *executionContext) _RequestTotalPriceTier(ctx context.Context, sel ast.SelectionSet, obj *objects.RequestTotalPriceTier) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, requestTotalPriceTierImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RequestTotalPriceTier")
+		case "upTo":
+			out.Values[i] = ec._RequestTotalPriceTier_upTo(ctx, field, obj)
+		case "items":
+			out.Values[i] = ec._RequestTotalPriceTier_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var requestTotalTieredPricingImplementors = []string{"RequestTotalTieredPricing"}
+
+func (ec *executionContext) _RequestTotalTieredPricing(ctx context.Context, sel ast.SelectionSet, obj *objects.RequestTotalTieredPricing) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, requestTotalTieredPricingImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RequestTotalTieredPricing")
+		case "tiers":
+			out.Values[i] = ec._RequestTotalTieredPricing_tiers(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -115642,6 +115968,74 @@ func (ec *executionContext) marshalNRequestStatus2githubᚗcomᚋloopljᚋaxonhu
 	return v
 }
 
+func (ec *executionContext) marshalNRequestTotalPriceTier2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTier(ctx context.Context, sel ast.SelectionSet, v objects.RequestTotalPriceTier) graphql.Marshaler {
+	return ec._RequestTotalPriceTier(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRequestTotalPriceTier2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTierᚄ(ctx context.Context, sel ast.SelectionSet, v []objects.RequestTotalPriceTier) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNRequestTotalPriceTier2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTier(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNRequestTotalPriceTierInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTier(ctx context.Context, v any) (objects.RequestTotalPriceTier, error) {
+	res, err := ec.unmarshalInputRequestTotalPriceTierInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNRequestTotalPriceTierInput2ᚕgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTierᚄ(ctx context.Context, v any) ([]objects.RequestTotalPriceTier, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]objects.RequestTotalPriceTier, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNRequestTotalPriceTierInput2githubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalPriceTier(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func (ec *executionContext) unmarshalNRequestWhereInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐRequestWhereInput(ctx context.Context, v any) (*ent.RequestWhereInput, error) {
 	res, err := ec.unmarshalInputRequestWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
@@ -122521,6 +122915,21 @@ func (ec *executionContext) marshalORequestStatus2ᚖgithubᚗcomᚋloopljᚋaxo
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) marshalORequestTotalTieredPricing2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalTieredPricing(ctx context.Context, sel ast.SelectionSet, v *objects.RequestTotalTieredPricing) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RequestTotalTieredPricing(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORequestTotalTieredPricingInput2ᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋobjectsᚐRequestTotalTieredPricing(ctx context.Context, v any) (*objects.RequestTotalTieredPricing, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputRequestTotalTieredPricingInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalORequestWhereInput2ᚕᚖgithubᚗcomᚋloopljᚋaxonhubᚋinternalᚋentᚐRequestWhereInputᚄ(ctx context.Context, v any) ([]*ent.RequestWhereInput, error) {

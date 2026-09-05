@@ -944,6 +944,101 @@ func TestComputeUsageCost_WithSchedule_Timezone(t *testing.T) {
 	require.InDelta(t, 0.00006, total.InexactFloat64(), 0.0000001)
 }
 
+func TestComputeUsageCost_WithRequestTotalTieredPricing(t *testing.T) {
+	requestTierItems := func(inputPrice, outputPrice string) []objects.ModelPriceItem {
+		return []objects.ModelPriceItem{
+			{
+				ItemCode: objects.PriceItemCodeUsage,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr(inputPrice),
+				},
+			},
+			{
+				ItemCode: objects.PriceItemCodeCompletion,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr(outputPrice),
+				},
+			},
+		}
+	}
+
+	upTo100K := int64(100_000)
+	price := objects.ModelPrice{
+		Items: requestTierItems("1", "1"),
+		RequestTotalTiered: &objects.RequestTotalTieredPricing{
+			Tiers: []objects.RequestTotalPriceTier{
+				{UpTo: &upTo100K, Items: requestTierItems("2", "8")},
+				{UpTo: nil, Items: requestTierItems("4", "12")},
+			},
+		},
+	}
+
+	t.Run("selects one price set using prompt plus completion tokens", func(t *testing.T) {
+		usage := &llm.Usage{
+			PromptTokens:     80_000,
+			CompletionTokens: 30_000,
+			// Deliberately inconsistent: tier selection must use the explicit sum.
+			TotalTokens: 1,
+		}
+
+		items, total := ComputeUsageCost(usage, price, time.Now())
+
+		require.Len(t, items, 2)
+		require.Equal(t, objects.PriceItemCodeUsage, items[0].ItemCode)
+		require.Equal(t, objects.PriceItemCodeCompletion, items[1].ItemCode)
+		require.True(t, decimal.RequireFromString("0.68").Equal(total))
+		require.True(t, decimal.RequireFromString("0.32").Equal(items[0].Subtotal))
+		require.True(t, decimal.RequireFromString("0.36").Equal(items[1].Subtotal))
+	})
+
+	t.Run("upper bound is inclusive", func(t *testing.T) {
+		usage := &llm.Usage{
+			PromptTokens:     80_000,
+			CompletionTokens: 20_000,
+			TotalTokens:      100_000,
+		}
+
+		_, total := ComputeUsageCost(usage, price, time.Now())
+
+		require.True(t, decimal.RequireFromString("0.32").Equal(total))
+	})
+
+	t.Run("applies cached token prices from the selected price set", func(t *testing.T) {
+		price.RequestTotalTiered.Tiers[1].Items = append(
+			price.RequestTotalTiered.Tiers[1].Items,
+			objects.ModelPriceItem{
+				ItemCode: objects.PriceItemCodePromptCachedToken,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr("2"),
+				},
+			},
+			objects.ModelPriceItem{
+				ItemCode: objects.PriceItemCodeWriteCachedTokens,
+				Pricing: objects.Pricing{
+					Mode:         objects.PricingModeUsagePerUnit,
+					UsagePerUnit: mustDecimalPtr("6"),
+				},
+			},
+		)
+		usage := &llm.Usage{
+			PromptTokens:     80_000,
+			CompletionTokens: 30_000,
+			PromptTokensDetails: &llm.PromptTokensDetails{
+				CachedTokens:      10_000,
+				WriteCachedTokens: 5_000,
+			},
+		}
+
+		items, total := ComputeUsageCost(usage, price, time.Now())
+
+		require.Len(t, items, 4)
+		require.True(t, decimal.RequireFromString("0.67").Equal(total))
+	})
+}
+
 func mustDecimalPtr(s string) *decimal.Decimal {
 	d, err := decimal.NewFromString(s)
 	if err != nil {
